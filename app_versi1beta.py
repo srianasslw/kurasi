@@ -12,41 +12,45 @@ import os
 # Mengabaikan pesan error cell tanggal yang tidak valid di openpyxl
 warnings.filterwarnings('ignore', category=UserWarning, module='openpyxl')
 
-# --- FUNGSI BARU: GABUNG 4 SHEET JADI 1 FILE TERPROTEKSI ---
-def to_excel_password(df_lolos, df_luar, df_anomali, df_ganda, nama_file_output):
+# --- FUNGSI BARU: ENKRIPSI EXCEL DENGAN PASSWORD (TAMBAHAN) ---
+def to_excel_password(df_save, nama_file_output):
+    # Inisialisasi COM untuk sistem Windows
     pythoncom.CoInitialize()
+    
     current_dir = os.getcwd()
-    
     # Nama file sementara
-    temp_polos = os.path.join(current_dir, "temp_gabungan_polos.xlsx")
-    temp_kunci = os.path.join(current_dir, "HASIL_KURASI_TERKUNCI.xlsx")
+    temp_polos = os.path.join(current_dir, "temp_data_polos.xlsx")
+    temp_kunci = os.path.join(current_dir, "DATA_HASIL_KURASI.xlsx")
     
-    # 1. Simpan semua dataframe ke dalam satu file Excel (Beda Sheet)
-    with pd.ExcelWriter(temp_polos, engine='xlsxwriter') as writer:
-        df_lolos.to_excel(writer, sheet_name='1_LOLOS_CIMAHI', index=False)
-        df_luar.to_excel(writer, sheet_name='2_LUAR_WILAYAH', index=False)
-        df_anomali.to_excel(writer, sheet_name='3_ANOMALI_REVISI', index=False)
-        df_ganda.to_excel(writer, sheet_name='4_GANDA_DUPLIKAT', index=False)
+    # Simpan ke excel biasa dulu menggunakan engine bawaan pandas
+    df_save.to_excel(temp_polos, index=False)
     
-    # 2. Proses Penguncian dengan Excel Windows
+    # Panggil engine Excel Windows
     excel = win32com.client.Dispatch("Excel.Application")
     excel.Visible = False
     excel.DisplayAlerts = False
     
     try:
         wb = excel.Workbooks.Open(temp_polos)
-        password_rahasia = "AnaMempesona" # Sesuai permintaan Anda sebelumnya
+        
+        # --- TENTUKAN PASSWORD DI SINI ---
+        password_rahasia = "AnaMempesona" 
+        
+        # Simpan ulang dengan password (51 = format .xlsx)
         wb.SaveAs(temp_kunci, 51, password_rahasia)
         wb.Close()
         
+        # Baca filenya untuk dikirim ke streamlit
         with open(temp_kunci, "rb") as f:
             data_binari = f.read()
+            
         return data_binari
     except Exception as e:
         st.error(f"Gagal mengunci file: {e}")
         return None
     finally:
         excel.Quit()
+        # Bersihkan file sementara
         if os.path.exists(temp_polos): os.remove(temp_polos)
         if os.path.exists(temp_kunci): os.remove(temp_kunci)
 
@@ -418,35 +422,56 @@ else:
                     else:
                         st.info("Tidak ada data ganda.")
 
-                # --- 8. TOMBOL UNDUH TERPADU (1 FILE SEMUA SHEET) ---
-                st.write("---")
-                st.subheader("📥 Unduh Hasil Kurasi")
-                
-                role_user = st.session_state.get("user_role", "USER")
-                st.info(f"🛡️ **Sistem Keamanan**: File diolah oleh **{role_user}** dan diproteksi password.")
+                # 8. TOMBOL UNDUH
+                # def to_excel(df_save, nama_file_output):
+                #     output = io.BytesIO()
+                #     with pd.ExcelWriter(output, engine='openpyxl') as writer:
+                #         df_save.to_excel(writer, index=False, sheet_name='HASIL')
+                #     return output.getvalue()
 
-                # Tombol tunggal untuk memproses semua data
-                if st.button("🔐 Proteksi Excel BNBA"):
-                    with st.spinner("Sedang mengunci file..."):
-                        # Nama file final
-                        nama_file_final = f"LAPORAN_KURASI_{role_user}_{uploaded_file.name}"
-                        
-                        # Memanggil fungsi baru dengan mengirim 4 dataframe sekaligus
-                        data_siap = to_excel_password(
-                            df_lolos, 
-                            df_luar_wilayah, 
-                            df_anomali, 
-                            df_ganda, 
-                            nama_file_final
-                        )
-                        
-                        if data_siap:
-                            st.success("✅ Berhasil! File gabungan sudah terproteksi.")
-                            st.download_button(
-                                label="📥 Klik di Sini untuk Download Laporan (.xlsx)",
-                                data=data_siap,
-                                file_name=nama_file_final,
-                                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                            )
+                # --- 8. TOMBOL UNDUH (VERSI PROTEKSI PASSWORD) ---
+                st.write("---")
+                st.subheader("📥 Unduh Hasil Akhir")
+                
+                # Mengambil role user agar muncul di nama file
+                role_user = st.session_state.get("user_role", "USER")
+
+                c1, c2, c3, c4 = st.columns(4)
+
+                with c1:
+                    if not df_lolos.empty:
+                        if st.button("🔒 Proteksi Data Lolos"):
+                            with st.spinner("Memproses..."):
+                                nama_file = f"1_LOLOS_{role_user}_{uploaded_file.name}"
+                                data = to_excel_password(df_lolos, nama_file)
+                                if data:
+                                    st.download_button("📥 Download Lolos", data=data, file_name=nama_file, key="dl_lolos")
+
+                with c2:
+                    if not df_luar_wilayah.empty:
+                        if st.button("🔒 Proteksi Data Luar Wilayah"):
+                            with st.spinner("Memproses..."):
+                                nama_file = f"2_3277+_{role_user}_{uploaded_file.name}"
+                                data = to_excel_password(df_luar_wilayah, nama_file)
+                                if data:
+                                    st.download_button("📥 Download Luar", data=data, file_name=nama_file, key="dl_luar")
+
+                with c3:
+                    if not df_anomali.empty:
+                        if st.button("🔒 Proteksi Data Anomali"):
+                            with st.spinner("Memproses..."):
+                                nama_file = f"3_REVISI_{role_user}_{uploaded_file.name}"
+                                data = to_excel_password(df_anomali, nama_file)
+                                if data:
+                                    st.download_button("📥 Download Anomali", data=data, file_name=nama_file, key="dl_anomali")
+
+                with c4:
+                    if not df_ganda.empty:
+                        if st.button("🔒 Proteksi Data Ganda"):
+                            with st.spinner("Memproses..."):
+                                nama_file = f"4_GANDA_{role_user}_{uploaded_file.name}"
+                                data = to_excel_password(df_ganda, nama_file)
+                                if data:
+                                    st.download_button("📥 Download Ganda", data=data, file_name=nama_file, key="dl_ganda")
             else:
                 st.error("❌ Kolom 'NIK' tidak ditemukan!")
