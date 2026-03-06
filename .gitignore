@@ -1,0 +1,2 @@
+# Mengabaikan folder konfigurasi Streamlit yang berisi secrets
+.streamlit/
